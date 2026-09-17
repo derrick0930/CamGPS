@@ -1,70 +1,63 @@
-# CamGPS 📸📍
+# CamGPS
 
-**CamGPS** adalah aplikasi kamera Android modern yang dibangun menggunakan **Kotlin** dan **Gradle**. Aplikasi ini secara otomatis membakar stempel (*watermark stamp*) berisi informasi lokasi aktual, koordinat presisi, alamat lengkap, tanggal & waktu, serta thumbnail foto satelit aerial langsung ke bagian bawah foto yang diambil.
+## English
 
-Koordinat lokasi diambil secara langsung dari sensor GPS perangkat (**tidak dapat diubah atau dimanipulasi secara manual**) sehingga sangat cocok untuk dokumentasi lapangan, absensi kerja, survei, inspeksi proyek, dan pelaporan kegiatan resmi.
+### Introduction
+CamGPS is an Android camera application built using Kotlin and Gradle. When a photo is taken, actual device GPS location information (latitude and longitude coordinates), complete reverse-geocoded address, date and time with GMT timezone, and a Google satellite map thumbnail are automatically stamped onto the bottom of the photo. Coordinates are strictly sourced from the device's hardware GPS sensors and cannot be manually configured. The app also supports Photo, Portrait, and Video recording modes.
 
----
+### How to Build
 
-## ✨ Fitur Utama
-
-- 📍 **GPS Akurat & Anti-Manipulasi**: Menggunakan Google Play Services `FusedLocationProviderClient` (High Accuracy) dan sensor GPS hardware. Koordinat lintang dan bujur disajikan hingga 6 digit desimal (`Lat ... Long ...`).
-- 🛰️ **Thumbnail Peta Satelit Google**: Menampilkan citra satelit/aerial nyata di sudut stempel dengan pin merah 3D yang terpusat tepat pada posisi koordinat pengguna (*pixel-exact centering*).
-- 🏷️ **Alamat Lengkap Otomatis**: Fitur *Reverse Geocoding* otomatis mengonversi koordinat menjadi nama jalan, kelurahan/desa, kecamatan, kabupaten/kota, provinsi, kode pos, dan bendera negara.
-- 🕒 **Tanggal, Waktu & Zona Waktu**: Format waktu lengkap dengan hari dan offset GMT (contoh: `Jumat, 19/06/2026 10:29 AM GMT +07:00`).
-- 📷 **3 Mode Kamera**:
-  - **PHOTO**: Pengambilan foto resolusi tinggi dengan stempel kartu transparan modern.
-  - **PORTRAIT**: Efek *depth-of-field* / blur latar belakang yang halus di sekitar subjek.
-  - **VIDEO**: Perekaman video MP4 lengkap dengan indikator waktu rekam dan penyimpanan otomatis ke galeri.
-- 🔄 **Kontrol Kamera Lengkap**: Mendukung ganti kamera (depan/belakang), pengaturan lampu kilat (*Auto*, *On*, *Off*), dan indikator status sinyal GPS (*GPS Locked*).
-
----
-
-## 🚀 Cara Build & Menjalankan
-
-### Kebutuhan Sistem
-- **Java**: JDK 17 (misal: Eclipse Adoptium Temurin 17)
-- **Android SDK**: Platform 36 & Build-Tools 35.0.0+
-
-### Langkah Build Singkat
-
-1. **Clone repository:**
+1. Clone the repository:
    ```bash
    git clone https://github.com/derrick0930/CamGPS.git
    ```
 
-2. **Masuk ke folder proyek:**
+2. Navigate to the project directory:
    ```bash
    cd CamGPS
    ```
 
-3. **Jalankan perintah build release:**
-   - **Linux / macOS:**
+3. Build the release APK:
+   - Linux / macOS:
      ```bash
      ./gradlew assembleRelease
      ```
-   - **Windows (PowerShell / Command Prompt):**
+   - Windows:
      ```cmd
      gradlew.bat assembleRelease
      ```
 
-### 📦 Lokasi File APK
-Setelah proses build selesai, file APK siap instal (*signed*) dapat ditemukan di:
-```
-app/build/outputs/apk/release/app-release.apk
-```
+The output APK will be located at:
+`app/build/outputs/apk/release/app-release.apk`
 
 ---
 
-## 📱 Cara Instal ke Perangkat
+## Bahasa Indonesia
 
-- **Install via ADB:**
-  ```bash
-  adb install -r app/build/outputs/apk/release/app-release.apk
-  ```
-- **Install Langsung:** Salin file `app-release.apk` ke ponsel Android Anda lalu tap untuk menginstal.
+### Pengenalan
+CamGPS adalah aplikasi kamera Android yang dikembangkan menggunakan Kotlin dan Gradle. Saat foto diambil, informasi lokasi GPS aktual dari perangkat (koordinat lintang dan bujur), alamat lengkap hasil reverse-geocoding, tanggal dan waktu beserta zona waktu GMT, serta thumbnail peta satelit Google secara otomatis dicetak pada bagian bawah foto. Koordinat diperoleh langsung dari sensor GPS perangkat dan tidak dapat diubah secara manual. Aplikasi ini juga mendukung mode Foto, Portrait, dan Perekaman Video.
 
----
+### Cara Build
 
-## 🛠️ Lisensi
-Dibuat untuk keperluan dokumentasi dan fotografi berbasis lokasi presisi.
+1. Clone repository:
+   ```bash
+   git clone https://github.com/derrick0930/CamGPS.git
+   ```
+
+2. Masuk ke direktori proyek:
+   ```bash
+   cd CamGPS
+   ```
+
+3. Jalankan perintah build release:
+   - Linux / macOS:
+     ```bash
+     ./gradlew assembleRelease
+     ```
+   - Windows:
+     ```cmd
+     gradlew.bat assembleRelease
+     ```
+
+File APK hasil build berada di:
+`app/build/outputs/apk/release/app-release.apk`
