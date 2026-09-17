@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">CamGPS</string>
+    <string name="gps_searching">Acquiring GPS...</string>
+    <string name="gps_locked">GPS Locked (±%dm)</string>
+    <string name="gps_disabled">GPS is disabled. Tap to enable.</string>
+    <string name="permission_required_message">CamGPS requires Camera and Location permissions to capture photos with accurate GPS coordinates.</string>
+    <string name="grant_permissions">Grant Permissions</string>
+    <string name="capturing">Processing photo...</string>
+    <string name="photo_saved">Photo saved with GPS stamp</string>
+    <string name="photo_save_failed">Failed to save photo</string>
+    <string name="watermark_brand">CamGPS</string>
+</resources>

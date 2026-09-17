@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#00E5FF</color>
+    <color name="primary_variant">#00B0FF</color>
+    <color name="secondary">#FFAB00</color>
+    <color name="background">#0F172A</color>
+    <color name="surface">#1E293B</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#CBD5E1</color>
+    <color name="text_muted">#94A3B8</color>
+    <color name="stamp_background">#CC000000</color>
+    <color name="accent_red">#FF3B30</color>
+    <color name="gps_locked">#34C759</color>
+    <color name="gps_searching">#FF9500</color>
+    <color name="shutter_inner">#FFFFFF</color>
+    <color name="shutter_outer">#40FFFFFF</color>
+</resources>
