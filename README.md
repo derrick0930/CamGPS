@@ -3,9 +3,8 @@
 | Informasi / Information | Keterangan / Detail |
 | --- | --- |
 | Nama Aplikasi / App Name | CamGPS |
-| Ukuran File / File Size | ~6 MB |
+| Ukuran File / File Size | 6 MB |
 | Iklan / Ads | No Ads / Bebas Iklan |
-| Versi / Version | 1.0.0 |
 | Bahasa / Language | Kotlin |
 | Platform | Android 7.0+ (API 24+) |
 
