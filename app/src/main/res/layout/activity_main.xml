@@ -130,12 +130,12 @@
         app:layout_constraintBottom_toTopOf="@id/bottomBar">
 
         <TextView
-            android:id="@+id/tvModePortrait"
+            android:id="@+id/tvModeLivePhoto"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:paddingHorizontal="16dp"
             android:paddingVertical="6dp"
-            android:text="PORTRAIT"
+            android:text="LIVE PHOTO"
             android:textColor="#88FFFFFF"
             android:textSize="13sp"
             android:textStyle="bold" />

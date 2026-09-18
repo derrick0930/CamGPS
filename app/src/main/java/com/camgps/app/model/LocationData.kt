@@ -5,6 +5,7 @@ data class LocationData(
     val longitude: Double = 0.0,
     val altitude: Double = 0.0,
     val accuracy: Float = 0f,
+    val displayAccuracy: Int = 1,
     val timestamp: Long = System.currentTimeMillis(),
     val locationTitle: String = "Locating GPS...",
     val fullAddress: String = "Acquiring satellite lock...",

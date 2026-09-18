@@ -21,27 +21,109 @@ object WatermarkDrawer {
 
     /**
      * Stretches or renders the watermark stamp onto the target captured Bitmap.
-     * Optionally applies a portrait depth-of-field effect if isPortraitMode is true.
      */
     fun stampPhoto(
         sourceBitmap: Bitmap,
         locationData: LocationData,
-        mapBitmap: Bitmap,
-        isPortraitMode: Boolean = false
+        mapBitmap: Bitmap?,
+        isLivePhoto: Boolean = false
     ): Bitmap {
-        // Apply portrait blur effect if requested
-        val workingBitmap = if (isPortraitMode) {
-            applyPortraitDepthEffect(sourceBitmap)
-        } else {
-            if (sourceBitmap.isMutable) sourceBitmap else sourceBitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val workingBitmap = if (sourceBitmap.isMutable) sourceBitmap else sourceBitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(workingBitmap)
+        val brandTag = if (isLivePhoto) "CamGPS • Live" else "CamGPS"
+
+        drawWatermarkCard(
+            canvas = canvas,
+            imgWidth = workingBitmap.width.toFloat(),
+            imgHeight = workingBitmap.height.toFloat(),
+            locationData = locationData,
+            mapBitmap = mapBitmap,
+            brandTag = brandTag
+        )
+
+        return workingBitmap
+    }
+
+    /**
+     * Renders the watermark onto a video frame Canvas, automatically accounting for
+     * the video encoder buffer orientation (landscape sensor buffer) and output rotation metadata,
+     * ensuring the watermark appears upright at the bottom of the portrait screen, identical to photo mode.
+     */
+    fun drawRotatedVideoWatermark(
+        canvas: Canvas,
+        rotationDegrees: Int,
+        locationData: LocationData,
+        mapBitmap: Bitmap?,
+        brandTag: String = "CamGPS",
+        isMirroring: Boolean = false
+    ) {
+        val bufW = canvas.width.toFloat()
+        val bufH = canvas.height.toFloat()
+
+        canvas.save()
+        val portraitW: Float
+        val portraitH: Float
+
+        val normRotation = ((rotationDegrees % 360) + 360) % 360
+
+        when {
+            normRotation == 90 || (normRotation == 0 && bufW > bufH) -> {
+                // Landscape buffer (e.g. 1920x1080) displayed as portrait (1080x1920) with +90° rotation.
+                // Invert rotation: translate to (0, bufH) and rotate -90°
+                canvas.translate(0f, bufH)
+                canvas.rotate(-90f)
+                portraitW = bufH
+                portraitH = bufW
+            }
+            normRotation == 270 -> {
+                // Front camera rotated 270°: translate to (bufW, 0) and rotate +90°
+                canvas.translate(bufW, 0f)
+                canvas.rotate(90f)
+                portraitW = bufH
+                portraitH = bufW
+            }
+            normRotation == 180 -> {
+                canvas.translate(bufW, bufH)
+                canvas.rotate(180f)
+                portraitW = bufW
+                portraitH = bufH
+            }
+            else -> {
+                // Native portrait buffer
+                portraitW = bufW
+                portraitH = bufH
+            }
         }
 
-        val canvas = Canvas(workingBitmap)
-        val imgWidth = workingBitmap.width.toFloat()
-        val imgHeight = workingBitmap.height.toFloat()
+        if (isMirroring) {
+            canvas.translate(portraitW, 0f)
+            canvas.scale(-1f, 1f)
+        }
 
+        drawWatermarkCard(
+            canvas = canvas,
+            imgWidth = portraitW,
+            imgHeight = portraitH,
+            locationData = locationData,
+            mapBitmap = mapBitmap,
+            brandTag = brandTag
+        )
+        canvas.restore()
+    }
+
+    /**
+     * Renders the complete GPS watermark card on any Canvas (used for photos and video frames).
+     */
+    fun drawWatermarkCard(
+        canvas: Canvas,
+        imgWidth: Float,
+        imgHeight: Float,
+        locationData: LocationData,
+        mapBitmap: Bitmap?,
+        brandTag: String = "CamGPS"
+    ) {
         // Base reference width is 1080px; scale fonts and dimensions proportionally
-        val scale = imgWidth / 1080f
+        val scale = (imgWidth / 1080f).coerceIn(0.5f, 3.0f)
 
         // Padding & margins
         val cardMarginH = 24f * scale
@@ -58,7 +140,7 @@ object WatermarkDrawer {
 
         // Available text width (cardWidth - mapSize - paddings - gap)
         val textGap = 16f * scale
-        val textWidth = (cardWidth - (cardPadding * 2f) - mapSize - textGap).toInt()
+        val textWidth = (cardWidth - (cardPadding * 2f) - mapSize - textGap).toInt().coerceAtLeast(100)
 
         // Text paints
         val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -110,7 +192,7 @@ object WatermarkDrawer {
         val cardRight = cardLeft + cardWidth
         val cardBottom = cardTop + cardHeight
 
-        // 1. Draw Card Background (Semi-transparent black with subtle white outline)
+        // 1. Draw Card Background (Semi-transparent black with subtle border)
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#CC000000") // 80% opacity dark overlay
             style = Paint.Style.FILL
@@ -132,17 +214,25 @@ object WatermarkDrawer {
         val mapBottom = mapTop + mapSize
         val mapRect = RectF(mapLeft, mapTop, mapRight, mapBottom)
 
-        canvas.save()
-        val clipPath = android.graphics.Path().apply {
-            addRoundRect(mapRect, mapCornerRadius, mapCornerRadius, android.graphics.Path.Direction.CW)
+        if (mapBitmap != null && !mapBitmap.isRecycled) {
+            canvas.save()
+            val clipPath = android.graphics.Path().apply {
+                addRoundRect(mapRect, mapCornerRadius, mapCornerRadius, android.graphics.Path.Direction.CW)
+            }
+            canvas.clipPath(clipPath)
+            val srcMapRect = Rect(0, 0, mapBitmap.width, mapBitmap.height)
+            canvas.drawBitmap(mapBitmap, srcMapRect, mapRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+            canvas.restore()
+        } else {
+            // Placeholder map card background
+            val mapBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#1A202C")
+                style = Paint.Style.FILL
+            }
+            canvas.drawRoundRect(mapRect, mapCornerRadius, mapCornerRadius, mapBgPaint)
         }
-        canvas.clipPath(clipPath)
-        val srcMapRect = Rect(0, 0, mapBitmap.width, mapBitmap.height)
-        canvas.drawBitmap(mapBitmap, srcMapRect, mapRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-        canvas.restore()
 
-        // 3. Draw Watermark Badge at Top-Right (e.g. "CamGPS")
-        val brandTag = if (isPortraitMode) "CamGPS • Portrait" else "CamGPS"
+        // 3. Draw Watermark Badge at Top-Right (e.g. "CamGPS" or "CamGPS • Live")
         val brandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#DDDDDD")
             textSize = 18f * scale
@@ -200,53 +290,6 @@ object WatermarkDrawer {
         canvas.translate(textLeft, currentY)
         timeLayout.draw(canvas)
         canvas.restore()
-
-        return workingBitmap
-    }
-
-    private fun applyPortraitDepthEffect(source: Bitmap): Bitmap {
-        val width = source.width
-        val height = source.height
-
-        // 1. Create a blurred version of the source image via multi-step downscale/upscale
-        val smallW = (width / 12).coerceAtLeast(32)
-        val smallH = (height / 12).coerceAtLeast(32)
-        val downscaled = Bitmap.createScaledBitmap(source, smallW, smallH, true)
-        val blurred = Bitmap.createScaledBitmap(downscaled, width, height, true)
-        downscaled.recycle()
-
-        // 2. Composite: Keep center portrait subject sharp and blend blurred background around it
-        val result = source.copy(Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(result)
-
-        val centerX = width / 2f
-        val centerY = height * 0.42f // Portrait subject center
-        val radius = minOf(width, height) * 0.55f
-
-        val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = RadialGradient(
-                centerX, centerY, radius,
-                intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.BLACK),
-                floatArrayOf(0f, 0.4f, 1f),
-                Shader.TileMode.CLAMP
-            )
-        }
-
-        // Draw blurred layer through radial mask
-        val maskedBlurred = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val maskCanvas = Canvas(maskedBlurred)
-        maskCanvas.drawBitmap(blurred, 0f, 0f, null)
-        blurred.recycle()
-
-        val xferPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-        }
-        maskCanvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), maskPaint)
-
-        canvas.drawBitmap(maskedBlurred, 0f, 0f, null)
-        maskedBlurred.recycle()
-
-        return result
     }
 
     private fun createStaticLayout(

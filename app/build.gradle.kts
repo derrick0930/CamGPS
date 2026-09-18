@@ -61,10 +61,14 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.video)
     implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.effects)
 
     // Location
     implementation(libs.play.services.location)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // Exif & Metadata
+    implementation(libs.androidx.exifinterface)
 }

@@ -14,8 +14,16 @@
         android:scaleType="fitCenter"
         android:contentDescription="Stamped Photo Preview" />
 
+    <!-- Live Motion Video Player -->
+    <VideoView
+        android:id="@+id/videoPreview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- Top Bar with Close and Share -->
     <LinearLayout
+        android:id="@+id/previewTopBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="#66000000"
@@ -34,6 +42,7 @@
             app:tint="#FFFFFF" />
 
         <TextView
+            android:id="@+id/tvPreviewTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
@@ -52,6 +61,38 @@
             android:contentDescription="Share Photo"
             android:src="@drawable/ic_share"
             app:tint="#FFFFFF" />
+    </LinearLayout>
+
+    <!-- Live Photo Pill Badge -->
+    <LinearLayout
+        android:id="@+id/btnLiveBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_gps_status_badge"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/previewTopBar">
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:src="@drawable/ic_shutter_live" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="LIVE"
+            android:textColor="#FFD600"
+            android:textSize="12sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

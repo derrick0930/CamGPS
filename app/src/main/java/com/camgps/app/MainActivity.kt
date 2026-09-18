@@ -20,6 +20,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -31,6 +32,7 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
@@ -44,6 +46,7 @@ import com.camgps.app.databinding.ActivityMainBinding
 import com.camgps.app.databinding.DialogPhotoPreviewBinding
 import com.camgps.app.location.LocationHelper
 import com.camgps.app.model.LocationData
+import com.camgps.app.utils.MotionPhotoHelper
 import com.camgps.app.utils.StorageHelper
 import com.camgps.app.watermark.StaticMapHelper
 import com.camgps.app.watermark.WatermarkDrawer
@@ -53,6 +56,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.graphics.PorterDuff
+import android.os.Handler
+import android.os.Looper
+import androidx.camera.core.CameraEffect
+import androidx.camera.core.UseCaseGroup
+import androidx.camera.effects.OverlayEffect
+import kotlinx.coroutines.CompletableDeferred
+import java.io.File
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -61,7 +72,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 enum class CameraMode {
-    PORTRAIT,
+    LIVE_PHOTO,
     PHOTO,
     VIDEO
 }
@@ -104,6 +115,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Block screenshots and screen recordings while the app is open
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -153,15 +170,16 @@ class MainActivity : AppCompatActivity() {
             bindCameraUseCases()
         }
 
-        // Camera Modes: PORTRAIT, PHOTO, VIDEO
-        binding.tvModePortrait.setOnClickListener { switchCameraMode(CameraMode.PORTRAIT) }
+        // Camera Modes: LIVE_PHOTO, PHOTO, VIDEO
+        binding.tvModeLivePhoto.setOnClickListener { switchCameraMode(CameraMode.LIVE_PHOTO) }
         binding.tvModePhoto.setOnClickListener { switchCameraMode(CameraMode.PHOTO) }
         binding.tvModeVideo.setOnClickListener { switchCameraMode(CameraMode.VIDEO) }
 
-        // Shutter Button (Photo capture or Video record)
+        // Shutter Button (Photo capture, Live Photo, or Video record)
         binding.btnCapture.setOnClickListener {
             when (currentMode) {
-                CameraMode.PHOTO, CameraMode.PORTRAIT -> takePhoto()
+                CameraMode.PHOTO -> takePhoto()
+                CameraMode.LIVE_PHOTO -> takeLivePhoto()
                 CameraMode.VIDEO -> toggleVideoRecording()
             }
         }
@@ -172,7 +190,7 @@ class MainActivity : AppCompatActivity() {
                 promptEnableGps()
             } else {
                 val acc = if (currentLocationData.hasGpsLock) {
-                    "±${currentLocationData.accuracy.toInt()}m"
+                    "±${currentLocationData.displayAccuracy}m"
                 } else "Acquiring..."
                 Toast.makeText(
                     this,
@@ -206,14 +224,14 @@ class MainActivity : AppCompatActivity() {
         currentMode = mode
 
         // Update mode selector tabs visual styling
-        binding.tvModePortrait.setTextColor(if (mode == CameraMode.PORTRAIT) Color.parseColor("#FFD600") else Color.parseColor("#88FFFFFF"))
+        binding.tvModeLivePhoto.setTextColor(if (mode == CameraMode.LIVE_PHOTO) Color.parseColor("#FFD600") else Color.parseColor("#88FFFFFF"))
         binding.tvModePhoto.setTextColor(if (mode == CameraMode.PHOTO) Color.parseColor("#FFD600") else Color.parseColor("#88FFFFFF"))
         binding.tvModeVideo.setTextColor(if (mode == CameraMode.VIDEO) Color.parseColor("#FFD600") else Color.parseColor("#88FFFFFF"))
 
         // Update shutter icon
         when (mode) {
             CameraMode.PHOTO -> binding.btnCapture.setImageResource(R.drawable.ic_shutter)
-            CameraMode.PORTRAIT -> binding.btnCapture.setImageResource(R.drawable.ic_shutter_portrait)
+            CameraMode.LIVE_PHOTO -> binding.btnCapture.setImageResource(R.drawable.ic_shutter_live)
             CameraMode.VIDEO -> binding.btnCapture.setImageResource(R.drawable.ic_video_record)
         }
 
@@ -240,7 +258,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateGpsStatusChip(loc: LocationData) {
         if (loc.hasGpsLock) {
             binding.ivGpsIndicator.setImageResource(R.drawable.ic_gps_fixed)
-            val accText = String.format(getString(R.string.gps_locked), loc.accuracy.toInt())
+            val accText = String.format(getString(R.string.gps_locked), loc.displayAccuracy)
             binding.tvGpsStatus.text = accText
             binding.tvGpsStatus.setTextColor(ContextCompat.getColor(this, R.color.gps_locked))
         } else {
@@ -351,30 +369,98 @@ class MainActivity : AppCompatActivity() {
             try {
                 cameraProvider.unbindAll()
 
-                if (currentMode == CameraMode.VIDEO) {
-                    val recorder = Recorder.Builder()
-                        .setQualitySelector(QualitySelector.from(Quality.HD))
-                        .build()
-                    videoCapture = VideoCapture.withOutput(recorder)
+                // High-performance hardware Canvas overlay effect for burning GPS watermark into recorded video frames
+                val overlayEffect = OverlayEffect(
+                    CameraEffect.VIDEO_CAPTURE,
+                    0,
+                    Handler(Looper.getMainLooper())
+                ) { _ ->
+                }.apply {
+                    setOnDrawListener { frame ->
+                        val canvas = frame.overlayCanvas
+                        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+                        val brand = if (currentMode == CameraMode.LIVE_PHOTO) "CamGPS • Live" else "CamGPS"
+                        val rot = try { frame.rotationDegrees } catch (_: Exception) { if (canvas.width > canvas.height) 90 else 0 }
+                        val isMirror = try { frame.isMirroring } catch (_: Exception) { false }
+                        WatermarkDrawer.drawRotatedVideoWatermark(
+                            canvas = canvas,
+                            rotationDegrees = rot,
+                            locationData = currentLocationData,
+                            mapBitmap = currentMapBitmap,
+                            brandTag = brand,
+                            isMirroring = isMirror
+                        )
+                        true
+                    }
+                }
 
-                    camera = cameraProvider.bindToLifecycle(
-                        this,
-                        cameraSelector,
-                        preview,
-                        videoCapture
-                    )
-                } else {
-                    imageCapture = ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                        .setFlashMode(flashMode)
-                        .build()
+                when (currentMode) {
+                    CameraMode.VIDEO -> {
+                        val recorder = Recorder.Builder()
+                            .setQualitySelector(QualitySelector.from(Quality.HD))
+                            .build()
+                        videoCapture = VideoCapture.withOutput(recorder)
 
-                    camera = cameraProvider.bindToLifecycle(
-                        this,
-                        cameraSelector,
-                        preview,
-                        imageCapture
-                    )
+                        val useCaseGroup = UseCaseGroup.Builder()
+                            .addUseCase(preview)
+                            .addUseCase(videoCapture!!)
+                            .addEffect(overlayEffect)
+                            .build()
+
+                        camera = cameraProvider.bindToLifecycle(
+                            this,
+                            cameraSelector,
+                            useCaseGroup
+                        )
+                    }
+                    CameraMode.LIVE_PHOTO -> {
+                        imageCapture = ImageCapture.Builder()
+                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                            .setFlashMode(flashMode)
+                            .build()
+
+                        val recorder = Recorder.Builder()
+                            .setQualitySelector(QualitySelector.from(Quality.HD))
+                            .build()
+                        videoCapture = VideoCapture.withOutput(recorder)
+
+                        try {
+                            val useCaseGroup = UseCaseGroup.Builder()
+                                .addUseCase(preview)
+                                .addUseCase(imageCapture!!)
+                                .addUseCase(videoCapture!!)
+                                .addEffect(overlayEffect)
+                                .build()
+
+                            camera = cameraProvider.bindToLifecycle(
+                                this,
+                                cameraSelector,
+                                useCaseGroup
+                            )
+                        } catch (_: Exception) {
+                            videoCapture = null
+                            camera = cameraProvider.bindToLifecycle(
+                                this,
+                                cameraSelector,
+                                preview,
+                                imageCapture!!
+                            )
+                        }
+                    }
+                    CameraMode.PHOTO -> {
+                        imageCapture = ImageCapture.Builder()
+                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                            .setFlashMode(flashMode)
+                            .build()
+                        videoCapture = null
+
+                        camera = cameraProvider.bindToLifecycle(
+                            this,
+                            cameraSelector,
+                            preview,
+                            imageCapture!!
+                        )
+                    }
                 }
             } catch (exc: Exception) {
                 Toast.makeText(this, "Camera error: ${exc.message}", Toast.LENGTH_SHORT).show()
@@ -382,7 +468,7 @@ class MainActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    // ================= PHOTO / PORTRAIT CAPTURE =================
+    // ================= PHOTO / LIVE PHOTO CAPTURE =================
 
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
@@ -391,13 +477,11 @@ class MainActivity : AppCompatActivity() {
         binding.tvLoadingMessage.text = getString(R.string.capturing)
         binding.loadingOverlay.visibility = View.VISIBLE
 
-        val isPortrait = (currentMode == CameraMode.PORTRAIT)
-
         imageCapture.takePicture(
             cameraExecutor,
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                    processAndStampCapturedImage(imageProxy, isPortrait)
+                    processAndStampCapturedImage(imageProxy, isLivePhoto = false)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -408,6 +492,119 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun takeLivePhoto() {
+        val imageCapture = this.imageCapture ?: return
+
+        animateShutter()
+        binding.tvLoadingMessage.text = "Capturing Live Photo..."
+        binding.loadingOverlay.visibility = View.VISIBLE
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val tempClipFile = File(cacheDir, "live_clip_$timestamp.mp4")
+
+        val bitmapDeferred = CompletableDeferred<Bitmap?>()
+        val videoDeferred = CompletableDeferred<Boolean>()
+
+        // 1. Capture high-res still photo
+        imageCapture.takePicture(
+            cameraExecutor,
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                    try {
+                        val baseBitmap = imageProxyToBitmap(imageProxy)
+                        imageProxy.close()
+                        bitmapDeferred.complete(baseBitmap)
+                    } catch (e: Exception) {
+                        imageProxy.close()
+                        bitmapDeferred.complete(null)
+                    }
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    bitmapDeferred.complete(null)
+                }
+            }
+        )
+
+        // 2. Concurrently record short 2-second motion video clip with watermark to temporary file
+        val videoCapture = this.videoCapture
+        if (videoCapture != null && currentRecording == null) {
+            val fileOutputOptions = FileOutputOptions.Builder(tempClipFile).build()
+            val pendingRecording = videoCapture.output.prepareRecording(this, fileOutputOptions)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                pendingRecording.withAudioEnabled()
+            }
+
+            var liveClipRecording: Recording? = null
+            liveClipRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { recordEvent ->
+                if (recordEvent is VideoRecordEvent.Finalize) {
+                    videoDeferred.complete(!recordEvent.hasError())
+                }
+            }
+
+            // Record 2 seconds of live motion
+            lifecycleScope.launch {
+                delay(2000L)
+                try {
+                    liveClipRecording?.stop()
+                } catch (_: Exception) {}
+            }
+        } else {
+            videoDeferred.complete(false)
+        }
+
+        // 3. Assemble and save the genuine Google/Samsung Motion Photo format
+        lifecycleScope.launch(Dispatchers.Default) {
+            val baseBitmap = bitmapDeferred.await()
+            val videoSuccess = videoDeferred.await()
+
+            if (baseBitmap != null) {
+                val mapBmp = currentMapBitmap ?: StaticMapHelper.getMapThumbnail(
+                    currentLocationData.latitude,
+                    currentLocationData.longitude,
+                    size = 260
+                )
+
+                val stampedBitmap = WatermarkDrawer.stampPhoto(
+                    sourceBitmap = baseBitmap,
+                    locationData = currentLocationData,
+                    mapBitmap = mapBmp,
+                    isLivePhoto = true
+                )
+
+                val savedUri: Uri?
+                if (videoSuccess && tempClipFile.exists() && tempClipFile.length() > 0) {
+                    // Save as genuine Motion Photo (JPEG with XMP tags and appended MP4)
+                    savedUri = MotionPhotoHelper.saveMotionPhoto(
+                        context = this@MainActivity,
+                        stampedBitmap = stampedBitmap,
+                        videoFile = tempClipFile,
+                        locationData = currentLocationData
+                    )
+                } else {
+                    savedUri = StorageHelper.saveImageToGallery(this@MainActivity, stampedBitmap, "CamGPS_Live")
+                }
+
+                withContext(Dispatchers.Main) {
+                    binding.loadingOverlay.visibility = View.GONE
+                    if (savedUri != null) {
+                        Toast.makeText(this@MainActivity, "Live Photo saved with GPS stamp", Toast.LENGTH_SHORT).show()
+                        val previewVideoUri = if (videoSuccess && tempClipFile.exists()) Uri.fromFile(tempClipFile) else null
+                        showPhotoPreview(savedUri, previewVideoUri, isLive = true)
+                    } else {
+                        Toast.makeText(this@MainActivity, getString(R.string.photo_save_failed), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    binding.loadingOverlay.visibility = View.GONE
+                    Toast.makeText(this@MainActivity, getString(R.string.photo_save_failed), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun animateShutter() {
@@ -429,7 +626,7 @@ class MainActivity : AppCompatActivity() {
             })
     }
 
-    private fun processAndStampCapturedImage(imageProxy: ImageProxy, isPortrait: Boolean) {
+    private fun processAndStampCapturedImage(imageProxy: ImageProxy, isLivePhoto: Boolean) {
         lifecycleScope.launch(Dispatchers.Default) {
             try {
                 // 1. Convert ImageProxy to correctly rotated Bitmap
@@ -448,17 +645,18 @@ class MainActivity : AppCompatActivity() {
                     sourceBitmap = baseBitmap,
                     locationData = currentLocationData,
                     mapBitmap = mapBmp,
-                    isPortraitMode = isPortrait
+                    isLivePhoto = isLivePhoto
                 )
 
                 // 4. Save to device Gallery (Pictures/CamGPS)
-                val savedUri = StorageHelper.saveImageToGallery(this@MainActivity, stampedBitmap)
+                val prefix = if (isLivePhoto) "CamGPS_Live" else "CamGPS"
+                val savedUri = StorageHelper.saveImageToGallery(this@MainActivity, stampedBitmap, prefix)
 
                 withContext(Dispatchers.Main) {
                     binding.loadingOverlay.visibility = View.GONE
                     if (savedUri != null) {
                         Toast.makeText(this@MainActivity, getString(R.string.photo_saved), Toast.LENGTH_SHORT).show()
-                        showPhotoPreview(savedUri)
+                        showPhotoPreview(savedUri, isLive = isLivePhoto)
                     } else {
                         Toast.makeText(this@MainActivity, getString(R.string.photo_save_failed), Toast.LENGTH_SHORT).show()
                     }
@@ -494,18 +692,65 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showPhotoPreview(uri: Uri) {
+    private fun showPhotoPreview(imageUri: Uri, videoUri: Uri? = null, isLive: Boolean = false) {
         val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        dialog.window?.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
         val dialogBinding = DialogPhotoPreviewBinding.inflate(layoutInflater)
         dialog.setContentView(dialogBinding.root)
 
-        dialogBinding.ivPreview.setImageURI(uri)
+        dialogBinding.ivPreview.setImageURI(imageUri)
         dialogBinding.btnClose.setOnClickListener {
             dialog.dismiss()
         }
         dialogBinding.btnShare.setOnClickListener {
-            StorageHelper.sharePhoto(this, uri)
+            StorageHelper.sharePhoto(this, imageUri)
         }
+
+        if (isLive && videoUri != null) {
+            dialogBinding.btnLiveBadge.visibility = View.VISIBLE
+            dialogBinding.tvPreviewTitle.text = "CamGPS Live Photo"
+
+            fun playLiveMotion() {
+                dialogBinding.videoPreview.apply {
+                    visibility = View.VISIBLE
+                    setVideoURI(videoUri)
+                    setOnPreparedListener { mp ->
+                        mp.isLooping = false
+                        start()
+                    }
+                    setOnCompletionListener {
+                        visibility = View.GONE
+                    }
+                }
+            }
+
+            dialogBinding.btnLiveBadge.setOnClickListener {
+                playLiveMotion()
+            }
+            dialogBinding.ivPreview.setOnClickListener {
+                playLiveMotion()
+            }
+
+            // Auto-play once on open for animated Live Photo feel
+            lifecycleScope.launch {
+                delay(300L)
+                if (dialog.isShowing) {
+                    playLiveMotion()
+                }
+            }
+        } else {
+            dialogBinding.btnLiveBadge.visibility = View.GONE
+            dialogBinding.videoPreview.visibility = View.GONE
+            dialogBinding.tvPreviewTitle.text = "CamGPS Capture"
+        }
+
+        dialog.setOnDismissListener {
+            dialogBinding.videoPreview.stopPlayback()
+        }
+
         dialog.show()
     }
 
@@ -530,6 +775,10 @@ class MainActivity : AppCompatActivity() {
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+            if (currentLocationData.hasGpsLock) {
+                put(MediaStore.Video.Media.LATITUDE, currentLocationData.latitude)
+                put(MediaStore.Video.Media.LONGITUDE, currentLocationData.longitude)
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/CamGPS")
             }

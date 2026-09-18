@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="76dp"
+    android:height="76dp"
+    android:viewportWidth="76"
+    android:viewportHeight="76">
+    <!-- Outer White Ring -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:pathData="M38,38m-34,0a34,34 0 1,0 68,0a34,34 0 1,0 -68,0" />
+    <!-- Live Motion Concentric Accent Ring (Golden Yellow) -->
+    <path
+        android:strokeColor="#FFD600"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M38,38m-29,0a29,29 0 1,0 58,0a29,29 0 1,0 -58,0" />
+    <!-- Inner solid white circle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,38m-24,0a24,24 0 1,0 48,0a24,24 0 1,0 -48,0" />
+    <!-- Center Live Photo Core Dot -->
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M38,38m-8,0a8,8 0 1,0 16,0a8,8 0 1,0 -16,0" />
+</vector>
