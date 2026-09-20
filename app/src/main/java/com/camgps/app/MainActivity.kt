@@ -44,8 +44,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.camgps.app.databinding.ActivityMainBinding
 import com.camgps.app.databinding.DialogPhotoPreviewBinding
+import com.camgps.app.databinding.DialogSettingsBinding
 import com.camgps.app.location.LocationHelper
 import com.camgps.app.model.LocationData
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import android.content.res.ColorStateList
 import com.camgps.app.utils.MotionPhotoHelper
 import com.camgps.app.utils.StorageHelper
 import com.camgps.app.watermark.StaticMapHelper
@@ -56,6 +59,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import android.graphics.PorterDuff
 import android.os.Handler
 import android.os.Looper
@@ -94,6 +98,10 @@ class MainActivity : AppCompatActivity() {
     private var currentLocationData = LocationData()
     private var currentMapBitmap: Bitmap? = null
 
+    private var isWatermarkEnabled = true
+    private val prefsName = "CamGPS_Prefs"
+    private val keyWatermarkEnabled = "pref_watermark_enabled"
+
     private var timeUpdateJob: Job? = null
     private var videoTimerJob: Job? = null
     private var videoDurationSeconds = 0
@@ -127,7 +135,11 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor = Executors.newSingleThreadExecutor()
         locationHelper = LocationHelper(this)
 
+        isWatermarkEnabled = getSharedPreferences(prefsName, MODE_PRIVATE)
+            .getBoolean(keyWatermarkEnabled, true)
+
         setupUI()
+        updateWatermarkUiState()
         checkAndRequestPermissions()
     }
 
@@ -141,6 +153,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        try {
+            camera?.cameraControl?.enableTorch(false)
+        } catch (_: Exception) {}
         locationHelper.stopLocationUpdates()
         timeUpdateJob?.cancel()
         if (currentRecording != null) {
@@ -182,6 +197,11 @@ class MainActivity : AppCompatActivity() {
                 CameraMode.LIVE_PHOTO -> takeLivePhoto()
                 CameraMode.VIDEO -> toggleVideoRecording()
             }
+        }
+
+        // Settings Button (Left of shutter button) - Watermark toggle
+        binding.btnSettings.setOnClickListener {
+            showSettingsDialog()
         }
 
         // GPS Info Button (Right side)
@@ -274,6 +294,53 @@ class MainActivity : AppCompatActivity() {
             currentMapBitmap = mapBmp
             binding.liveStampOverlay.ivMapTile.setImageBitmap(mapBmp)
         }
+    }
+
+    private fun updateWatermarkUiState() {
+        binding.liveStampOverlay.root.visibility = if (isWatermarkEnabled) View.VISIBLE else View.GONE
+        val tintColor = if (isWatermarkEnabled) Color.parseColor("#00E5FF") else Color.parseColor("#88FFFFFF")
+        binding.btnSettings.imageTintList = ColorStateList.valueOf(tintColor)
+    }
+
+    private fun showSettingsDialog() {
+        val bottomSheetDialog = BottomSheetDialog(this, R.style.Theme_CamGPS_BottomSheetDialog)
+        val dialogBinding = DialogSettingsBinding.inflate(layoutInflater)
+        bottomSheetDialog.setContentView(dialogBinding.root)
+
+        dialogBinding.switchGpsWatermark.isChecked = isWatermarkEnabled
+        updateDialogSwitchVisuals(dialogBinding, isWatermarkEnabled)
+
+        fun onToggle(enabled: Boolean) {
+            isWatermarkEnabled = enabled
+            getSharedPreferences(prefsName, MODE_PRIVATE)
+                .edit()
+                .putBoolean(keyWatermarkEnabled, enabled)
+                .apply()
+            updateWatermarkUiState()
+            updateDialogSwitchVisuals(dialogBinding, enabled)
+        }
+
+        dialogBinding.switchGpsWatermark.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked != isWatermarkEnabled) {
+                onToggle(isChecked)
+            }
+        }
+
+        dialogBinding.layoutWatermarkSetting.setOnClickListener {
+            val newState = !dialogBinding.switchGpsWatermark.isChecked
+            dialogBinding.switchGpsWatermark.isChecked = newState
+        }
+
+        dialogBinding.btnCloseSettings.setOnClickListener {
+            bottomSheetDialog.dismiss()
+        }
+
+        bottomSheetDialog.show()
+    }
+
+    private fun updateDialogSwitchVisuals(dialogBinding: DialogSettingsBinding, enabled: Boolean) {
+        val iconColor = if (enabled) Color.parseColor("#00E5FF") else Color.parseColor("#888888")
+        dialogBinding.ivWatermarkIcon.imageTintList = ColorStateList.valueOf(iconColor)
     }
 
     private fun cycleFlashMode() {
@@ -379,17 +446,19 @@ class MainActivity : AppCompatActivity() {
                     setOnDrawListener { frame ->
                         val canvas = frame.overlayCanvas
                         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-                        val brand = if (currentMode == CameraMode.LIVE_PHOTO) "CamGPS • Live" else "CamGPS"
-                        val rot = try { frame.rotationDegrees } catch (_: Exception) { if (canvas.width > canvas.height) 90 else 0 }
-                        val isMirror = try { frame.isMirroring } catch (_: Exception) { false }
-                        WatermarkDrawer.drawRotatedVideoWatermark(
-                            canvas = canvas,
-                            rotationDegrees = rot,
-                            locationData = currentLocationData,
-                            mapBitmap = currentMapBitmap,
-                            brandTag = brand,
-                            isMirroring = isMirror
-                        )
+                        if (isWatermarkEnabled) {
+                            val brand = if (currentMode == CameraMode.LIVE_PHOTO) "CamGPS • Live" else "CamGPS"
+                            val rot = try { frame.rotationDegrees } catch (_: Exception) { if (canvas.width > canvas.height) 90 else 0 }
+                            val isMirror = try { frame.isMirroring } catch (_: Exception) { false }
+                            WatermarkDrawer.drawRotatedVideoWatermark(
+                                canvas = canvas,
+                                rotationDegrees = rot,
+                                locationData = currentLocationData,
+                                mapBitmap = currentMapBitmap,
+                                brandTag = brand,
+                                isMirroring = isMirror
+                            )
+                        }
                         true
                     }
                 }
@@ -473,7 +542,7 @@ class MainActivity : AppCompatActivity() {
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
 
-        animateShutter()
+        binding.btnCapture.isEnabled = false
         binding.tvLoadingMessage.text = getString(R.string.capturing)
         binding.loadingOverlay.visibility = View.VISIBLE
 
@@ -481,11 +550,13 @@ class MainActivity : AppCompatActivity() {
             cameraExecutor,
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                    animateShutter()
                     processAndStampCapturedImage(imageProxy, isLivePhoto = false)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
                     runOnUiThread {
+                        binding.btnCapture.isEnabled = true
                         binding.loadingOverlay.visibility = View.GONE
                         Toast.makeText(this@MainActivity, "Capture failed: ${exception.message}", Toast.LENGTH_SHORT).show()
                     }
@@ -498,39 +569,24 @@ class MainActivity : AppCompatActivity() {
     private fun takeLivePhoto() {
         val imageCapture = this.imageCapture ?: return
 
-        animateShutter()
-        binding.tvLoadingMessage.text = "Capturing Live Photo..."
-        binding.loadingOverlay.visibility = View.VISIBLE
-
+        binding.btnCapture.isEnabled = false
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val tempClipFile = File(cacheDir, "live_clip_$timestamp.mp4")
 
         val bitmapDeferred = CompletableDeferred<Bitmap?>()
         val videoDeferred = CompletableDeferred<Boolean>()
 
-        // 1. Capture high-res still photo
-        imageCapture.takePicture(
-            cameraExecutor,
-            object : ImageCapture.OnImageCapturedCallback() {
-                override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                    try {
-                        val baseBitmap = imageProxyToBitmap(imageProxy)
-                        imageProxy.close()
-                        bitmapDeferred.complete(baseBitmap)
-                    } catch (e: Exception) {
-                        imageProxy.close()
-                        bitmapDeferred.complete(null)
-                    }
-                }
+        val shouldFireFlash = (flashMode == ImageCapture.FLASH_MODE_ON || flashMode == ImageCapture.FLASH_MODE_AUTO) &&
+                (camera?.cameraInfo?.hasFlashUnit() == true)
 
-                override fun onError(exception: ImageCaptureException) {
-                    bitmapDeferred.complete(null)
-                }
-            }
-        )
+        // Ensure flash is OFF when starting the Live Photo recording
+        try {
+            camera?.cameraControl?.enableTorch(false)
+        } catch (_: Exception) {}
 
-        // 2. Concurrently record short 2-second motion video clip with watermark to temporary file
+        // 1. Live Photo starts FIRST: Start recording motion video clip (flash is currently off)
         val videoCapture = this.videoCapture
+        var liveClipRecording: Recording? = null
         if (videoCapture != null && currentRecording == null) {
             val fileOutputOptions = FileOutputOptions.Builder(tempClipFile).build()
             val pendingRecording = videoCapture.output.prepareRecording(this, fileOutputOptions)
@@ -538,22 +594,99 @@ class MainActivity : AppCompatActivity() {
                 pendingRecording.withAudioEnabled()
             }
 
-            var liveClipRecording: Recording? = null
             liveClipRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { recordEvent ->
                 if (recordEvent is VideoRecordEvent.Finalize) {
                     videoDeferred.complete(!recordEvent.hasError())
                 }
             }
+        } else {
+            videoDeferred.complete(false)
+        }
 
-            // Record 2 seconds of live motion
-            lifecycleScope.launch {
-                delay(2000L)
+        // 2. Coordinated sequence:
+        //    a) Live Photo records initial motion (flash OFF)
+        //    b) Flash turns ON (not simultaneously with start)
+        //    c) High-res still photo is captured while illuminated
+        //    d) Flash turns OFF
+        //    e) Live Photo records trailing motion, then stops (ONLY after flash turns off)
+        lifecycleScope.launch {
+            try {
+                // a) Live Photo records first: initial ambient motion window (600ms)
+                delay(600L)
+
+                // b) Flash fires AFTER Live Photo has already started
+                if (shouldFireFlash) {
+                    try {
+                        camera?.cameraControl?.enableTorch(true)
+                    } catch (_: Exception) {}
+                    // Allow camera sensor auto-exposure a moment to adapt to the flash (200ms)
+                    delay(200L)
+                }
+
+                // c) Capture high-res still photo while illuminated
+                // Temporarily disable ImageCapture's internal flashMode so CameraX doesn't cut off our torch
+                imageCapture.flashMode = ImageCapture.FLASH_MODE_OFF
+
+                imageCapture.takePicture(
+                    cameraExecutor,
+                    object : ImageCapture.OnImageCapturedCallback() {
+                        override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                            animateShutter()
+                            try {
+                                val baseBitmap = imageProxyToBitmap(imageProxy)
+                                imageProxy.close()
+                                bitmapDeferred.complete(baseBitmap)
+                            } catch (e: Exception) {
+                                imageProxy.close()
+                                bitmapDeferred.complete(null)
+                            }
+                        }
+
+                        override fun onError(exception: ImageCaptureException) {
+                            bitmapDeferred.complete(null)
+                        }
+                    }
+                )
+
+                // Wait for still image capture exposure to complete
+                withTimeoutOrNull(1500L) {
+                    bitmapDeferred.await()
+                }
+
+                // Keep flash on for an illuminated motion buffer (400ms)
+                delay(400L)
+
+                // d) Turn flash OFF
+                if (shouldFireFlash) {
+                    try {
+                        camera?.cameraControl?.enableTorch(false)
+                    } catch (_: Exception) {}
+                }
+
+                // e) Live Photo stops ONLY after the flash turns off (400ms trailing motion)
+                delay(400L)
                 try {
                     liveClipRecording?.stop()
                 } catch (_: Exception) {}
+
+            } catch (_: Exception) {
+                try {
+                    liveClipRecording?.stop()
+                } catch (_: Exception) {}
+            } finally {
+                // Safety: ensure torch is off and restore flashMode
+                if (shouldFireFlash) {
+                    try {
+                        camera?.cameraControl?.enableTorch(false)
+                    } catch (_: Exception) {}
+                }
+                imageCapture.flashMode = flashMode
             }
-        } else {
-            videoDeferred.complete(false)
+
+            withContext(Dispatchers.Main) {
+                binding.tvLoadingMessage.text = "Saving Live Photo..."
+                binding.loadingOverlay.visibility = View.VISIBLE
+            }
         }
 
         // 3. Assemble and save the genuine Google/Samsung Motion Photo format
@@ -562,36 +695,41 @@ class MainActivity : AppCompatActivity() {
             val videoSuccess = videoDeferred.await()
 
             if (baseBitmap != null) {
-                val mapBmp = currentMapBitmap ?: StaticMapHelper.getMapThumbnail(
-                    currentLocationData.latitude,
-                    currentLocationData.longitude,
-                    size = 260
-                )
-
-                val stampedBitmap = WatermarkDrawer.stampPhoto(
-                    sourceBitmap = baseBitmap,
-                    locationData = currentLocationData,
-                    mapBitmap = mapBmp,
-                    isLivePhoto = true
-                )
+                val finalBitmap = if (isWatermarkEnabled) {
+                    val mapBmp = currentMapBitmap ?: StaticMapHelper.getMapThumbnail(
+                        currentLocationData.latitude,
+                        currentLocationData.longitude,
+                        size = 260
+                    )
+                    WatermarkDrawer.stampPhoto(
+                        sourceBitmap = baseBitmap,
+                        locationData = currentLocationData,
+                        mapBitmap = mapBmp,
+                        isLivePhoto = true
+                    )
+                } else {
+                    baseBitmap
+                }
 
                 val savedUri: Uri?
                 if (videoSuccess && tempClipFile.exists() && tempClipFile.length() > 0) {
                     // Save as genuine Motion Photo (JPEG with XMP tags and appended MP4)
                     savedUri = MotionPhotoHelper.saveMotionPhoto(
                         context = this@MainActivity,
-                        stampedBitmap = stampedBitmap,
+                        stampedBitmap = finalBitmap,
                         videoFile = tempClipFile,
                         locationData = currentLocationData
                     )
                 } else {
-                    savedUri = StorageHelper.saveImageToGallery(this@MainActivity, stampedBitmap, "CamGPS_Live")
+                    savedUri = StorageHelper.saveImageToGallery(this@MainActivity, finalBitmap, "CamGPS_Live")
                 }
 
                 withContext(Dispatchers.Main) {
+                    binding.btnCapture.isEnabled = true
                     binding.loadingOverlay.visibility = View.GONE
                     if (savedUri != null) {
-                        Toast.makeText(this@MainActivity, "Live Photo saved with GPS stamp", Toast.LENGTH_SHORT).show()
+                        val msg = if (isWatermarkEnabled) "Live Photo saved with GPS stamp" else "Live Photo saved"
+                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                         val previewVideoUri = if (videoSuccess && tempClipFile.exists()) Uri.fromFile(tempClipFile) else null
                         showPhotoPreview(savedUri, previewVideoUri, isLive = true)
                     } else {
@@ -600,6 +738,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } else {
                 withContext(Dispatchers.Main) {
+                    binding.btnCapture.isEnabled = true
                     binding.loadingOverlay.visibility = View.GONE
                     Toast.makeText(this@MainActivity, getString(R.string.photo_save_failed), Toast.LENGTH_SHORT).show()
                 }
@@ -608,22 +747,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun animateShutter() {
-        val flashView = View(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.WHITE)
+        runOnUiThread {
+            val flashView = View(this).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(Color.WHITE)
+            }
+            binding.root.addView(flashView)
+            flashView.animate()
+                .alpha(0f)
+                .setDuration(180L)
+                .setListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        binding.root.removeView(flashView)
+                    }
+                })
         }
-        binding.root.addView(flashView)
-        flashView.animate()
-            .alpha(0f)
-            .setDuration(180L)
-            .setListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) {
-                    binding.root.removeView(flashView)
-                }
-            })
     }
 
     private fun processAndStampCapturedImage(imageProxy: ImageProxy, isLivePhoto: Boolean) {
@@ -633,26 +774,29 @@ class MainActivity : AppCompatActivity() {
                 val baseBitmap = imageProxyToBitmap(imageProxy)
                 imageProxy.close()
 
-                // 2. Prepare Map thumbnail centered exactly on GPS coordinates
-                val mapBmp = currentMapBitmap ?: StaticMapHelper.getMapThumbnail(
-                    currentLocationData.latitude,
-                    currentLocationData.longitude,
-                    size = 260
-                )
+                // 2. Prepare final Bitmap based on watermark toggle state
+                val finalBitmap = if (isWatermarkEnabled) {
+                    val mapBmp = currentMapBitmap ?: StaticMapHelper.getMapThumbnail(
+                        currentLocationData.latitude,
+                        currentLocationData.longitude,
+                        size = 260
+                    )
+                    WatermarkDrawer.stampPhoto(
+                        sourceBitmap = baseBitmap,
+                        locationData = currentLocationData,
+                        mapBitmap = mapBmp,
+                        isLivePhoto = isLivePhoto
+                    )
+                } else {
+                    baseBitmap
+                }
 
-                // 3. Stamp GPS watermark directly onto the Bitmap
-                val stampedBitmap = WatermarkDrawer.stampPhoto(
-                    sourceBitmap = baseBitmap,
-                    locationData = currentLocationData,
-                    mapBitmap = mapBmp,
-                    isLivePhoto = isLivePhoto
-                )
-
-                // 4. Save to device Gallery (Pictures/CamGPS)
+                // 3. Save to device Gallery (Pictures/CamGPS)
                 val prefix = if (isLivePhoto) "CamGPS_Live" else "CamGPS"
-                val savedUri = StorageHelper.saveImageToGallery(this@MainActivity, stampedBitmap, prefix)
+                val savedUri = StorageHelper.saveImageToGallery(this@MainActivity, finalBitmap, prefix)
 
                 withContext(Dispatchers.Main) {
+                    binding.btnCapture.isEnabled = true
                     binding.loadingOverlay.visibility = View.GONE
                     if (savedUri != null) {
                         Toast.makeText(this@MainActivity, getString(R.string.photo_saved), Toast.LENGTH_SHORT).show()
@@ -663,6 +807,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    binding.btnCapture.isEnabled = true
                     binding.loadingOverlay.visibility = View.GONE
                     Toast.makeText(this@MainActivity, "Error processing photo: ${e.message}", Toast.LENGTH_LONG).show()
                 }
@@ -765,6 +910,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     @SuppressLint("MissingPermission")
     private fun startVideoRecording() {
         val videoCapture = this.videoCapture ?: return

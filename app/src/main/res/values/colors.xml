@@ -14,4 +14,5 @@
     <color name="gps_searching">#FF9500</color>
     <color name="shutter_inner">#FFFFFF</color>
     <color name="shutter_outer">#40FFFFFF</color>
+    <color name="white">#FFFFFF</color>
 </resources>
