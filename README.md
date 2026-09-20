@@ -19,13 +19,9 @@ CamGPS is an Android camera application built using Kotlin and Gradle. When a ph
 - **Real-Time GPS Stamp**: Automatically stamps exact GPS coordinates, reverse-geocoded address, timestamp (GMT), and Google satellite map thumbnail onto photos.
 - **Hardware GPS Integrity**: Coordinates are strictly pulled from hardware sensors to ensure authenticity.
 - **Camera Modes**:
-  - **Live Photo (Beta)**: Captures a high-resolution stamped photo alongside a short motion clip that can be previewed interactively with live playback.
+  - **Live Photo**: Captures a high-resolution stamped photo alongside an embedded motion clip (standard Motion Photo format) that can be previewed interactively and played directly in compatible gallery apps (such as Google Photos and Samsung Gallery).
   - **Photo**: Instant capture with permanent GPS watermark card overlay.
   - **Video**: High-definition video recording.
-
-> [!WARNING]
-> **Live Photo is currently in Beta**:
-> The Live Photo feature is an experimental feature and is still under active development. You may encounter bugs, stability issues, or capture inconsistencies on certain Android devices and camera sensors. Bug reports, logs, and feedback are very welcome!
 
 ### How to Build
 
@@ -70,7 +66,7 @@ Contributions, bug reports, and feature suggestions are warmly welcomed! Help ma
    ```
 5. **Open a Pull Request** describing your changes.
 
-If you discover any bugs (especially in the Live Photo feature) or have ideas for enhancements, feel free to open an issue in the [GitHub Issues](https://github.com/derrick0930/CamGPS/issues) section.
+If you discover any bugs or have ideas for enhancements, feel free to open an issue in the [GitHub Issues](https://github.com/derrick0930/CamGPS/issues) section.
 
 ---
 
@@ -83,13 +79,9 @@ CamGPS adalah aplikasi kamera Android yang dikembangkan menggunakan Kotlin dan G
 - **Cap GPS Real-Time**: Otomatis mencetak koordinat presisi, alamat hasil reverse-geocoding, tanggal/waktu (GMT), serta cuplikan peta satelit Google ke foto.
 - **Integritas GPS Hardware**: Koordinat diambil langsung dari sensor GPS fisik perangkat sehingga akurat dan tidak dapat dimanipulasi secara manual.
 - **Mode Kamera**:
-  - **Foto Live (Beta)**: Mengabadikan foto beresolusi tinggi sekaligus klip video gerakan singkat (*live motion*) yang dapat diputar secara interaktif pada menu pratinjau.
+  - **Foto Live**: Mengabadikan foto beresolusi tinggi beserta klip video gerakan (*Motion Photo* standar) yang dapat diputar secara interaktif di aplikasi maupun langsung di aplikasi galeri yang mendukung (seperti Google Photos dan Samsung Gallery).
   - **Foto**: Pengambilan foto instan dengan watermark informasi GPS permanen.
   - **Video**: Perekaman video resolusi tinggi langsung dari aplikasi.
-
-> [!WARNING]
-> **Fitur Foto Live Masih Tahap Beta**:
-> Fitur Foto Live (Live Photo) saat ini masih berstatus **Beta** dan dalam tahap pengembangan. Kemungkinan masih terdapat bug, kendala kestabilan, atau kompatibilitas pada perangkat/sensor kamera tertentu. Laporan kendala dan masukan sangat kami harapkan!
 
 ### Cara Build
 
@@ -117,7 +109,7 @@ File APK hasil build berada di:
 `app/build/outputs/apk/release/app-release.apk`
 
 ### Kontribusi
-Kami sangat menyambut kontribusi dari komunitas open-source! Bantuan Anda dalam memperbaiki bug, menyempurnakan fitur Foto Live, ataupun menambahkan kemampuan baru akan sangat bermanfaat:
+Kami sangat menyambut kontribusi dari komunitas open-source! Bantuan Anda dalam memperbaiki bug ataupun menambahkan kemampuan baru akan sangat bermanfaat:
 
 1. **Fork** repositori ini ke akun GitHub Anda.
 2. **Buat branch baru** untuk fitur atau perbaikan Anda:
