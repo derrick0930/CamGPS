@@ -22,7 +22,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.Toast
+import androidx.viewpager2.widget.ViewPager2
+import com.camgps.app.onboarding.OnboardingAdapter
+import com.camgps.app.onboarding.OnboardingItem
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -102,6 +107,7 @@ class MainActivity : AppCompatActivity() {
     private var isWatermarkEnabled = true
     private val prefsName = "CamGPS_Prefs"
     private val keyWatermarkEnabled = "pref_watermark_enabled"
+    private val keyOnboardingCompleted = "pref_onboarding_completed"
 
     private var timeUpdateJob: Job? = null
     private var videoTimerJob: Job? = null
@@ -158,7 +164,17 @@ class MainActivity : AppCompatActivity() {
 
         setupUI()
         updateWatermarkUiState()
-        checkAndRequestPermissions()
+
+        val isOnboardingCompleted = getSharedPreferences(prefsName, MODE_PRIVATE)
+            .getBoolean(keyOnboardingCompleted, false)
+
+        if (!isOnboardingCompleted) {
+            setupOnboarding()
+            dismissLoadingScreen(delayMs = 800L)
+        } else {
+            binding.onboardingOverlay.visibility = View.GONE
+            checkAndRequestPermissions()
+        }
     }
 
     override fun onResume() {
@@ -419,6 +435,105 @@ class MainActivity : AppCompatActivity() {
                     .start()
             }
         }, delayMs)
+    }
+
+    private fun setupOnboarding() {
+        binding.onboardingOverlay.visibility = View.VISIBLE
+
+        val items = listOf(
+            OnboardingItem(
+                iconRes = R.drawable.ic_location_pin,
+                titleRes = R.string.onboarding_title_1,
+                descRes = R.string.onboarding_desc_1,
+                iconTint = Color.parseColor("#00E5FF")
+            ),
+            OnboardingItem(
+                iconRes = R.drawable.ic_shield_gps,
+                titleRes = R.string.onboarding_title_2,
+                descRes = R.string.onboarding_desc_2,
+                iconTint = Color.parseColor("#00E5FF")
+            ),
+            OnboardingItem(
+                iconRes = R.drawable.ic_shutter_live,
+                titleRes = R.string.onboarding_title_3,
+                descRes = R.string.onboarding_desc_3,
+                iconTint = Color.parseColor("#00E5FF")
+            ),
+            OnboardingItem(
+                iconRes = R.drawable.ic_gps_fixed,
+                titleRes = R.string.onboarding_title_4,
+                descRes = R.string.onboarding_desc_4,
+                iconTint = Color.parseColor("#00E5FF")
+            )
+        )
+
+        binding.vpOnboarding.adapter = OnboardingAdapter(items)
+        setupOnboardingIndicators(items.size, 0)
+
+        binding.vpOnboarding.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                setupOnboardingIndicators(items.size, position)
+                val isLastPage = (position == items.size - 1)
+                binding.btnOnboardingSkip.visibility = if (isLastPage) View.INVISIBLE else View.VISIBLE
+                binding.tvOnboardingBtnText.text = if (isLastPage) {
+                    getString(R.string.onboarding_get_started)
+                } else {
+                    getString(R.string.onboarding_next)
+                }
+                binding.ivOnboardingBtnIcon.visibility = if (isLastPage) View.GONE else View.VISIBLE
+            }
+        })
+
+        binding.btnOnboardingAction.setOnClickListener {
+            val current = binding.vpOnboarding.currentItem
+            if (current < items.size - 1) {
+                binding.vpOnboarding.currentItem = current + 1
+            } else {
+                completeOnboarding()
+            }
+        }
+
+        binding.btnOnboardingSkip.setOnClickListener {
+            completeOnboarding()
+        }
+    }
+
+    private fun setupOnboardingIndicators(count: Int, activeIndex: Int) {
+        binding.layoutOnboardingIndicators.removeAllViews()
+        val density = resources.displayMetrics.density
+        for (i in 0 until count) {
+            val dot = ImageView(this).apply {
+                setImageResource(
+                    if (i == activeIndex) R.drawable.indicator_dot_active
+                    else R.drawable.indicator_dot_inactive
+                )
+                val margin = (4 * density).toInt()
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    setMargins(margin, 0, margin, 0)
+                }
+            }
+            binding.layoutOnboardingIndicators.addView(dot)
+        }
+    }
+
+    private fun completeOnboarding() {
+        getSharedPreferences(prefsName, MODE_PRIVATE)
+            .edit()
+            .putBoolean(keyOnboardingCompleted, true)
+            .apply()
+
+        binding.onboardingOverlay.animate()
+            .alpha(0f)
+            .setDuration(350)
+            .withEndAction {
+                binding.onboardingOverlay.visibility = View.GONE
+                checkAndRequestPermissions()
+            }
+            .start()
     }
 
     private fun allPermissionsGranted(): Boolean {

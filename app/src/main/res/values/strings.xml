@@ -12,4 +12,17 @@
     <string name="app_subtitle">GPS Map &amp; Watermark Camera</string>
     <string name="loading_camera_gps">Memuat Kamera &amp; GPS...</string>
     <string name="app_version_tag">Precision Location Stamping • v1.1</string>
+
+    <!-- Onboarding Strings -->
+    <string name="onboarding_skip">Lewati</string>
+    <string name="onboarding_next">Lanjut</string>
+    <string name="onboarding_get_started">Mulai Gunakan CamGPS</string>
+    <string name="onboarding_title_1">Cap GPS &amp; Peta Otomatis</string>
+    <string name="onboarding_desc_1">Foto dan video Anda otomatis dibubuhi koordinat akurat, alamat lengkap, waktu GMT, dan peta satelit Google secara permanen.</string>
+    <string name="onboarding_title_2">Integritas Sensor Hardware</string>
+    <string name="onboarding_desc_2">Koordinat diambil murni dari sensor GPS fisik perangkat menggunakan filter Kalman untuk memastikan keaslian data lapangan.</string>
+    <string name="onboarding_title_3">Foto Live &amp; Perekaman Video</string>
+    <string name="onboarding_desc_3">Abadikan momen dengan Foto Live (Motion Photo standar) serta video HD dengan stempel watermark GPS secara langsung.</string>
+    <string name="onboarding_title_4">Siap Digunakan!</string>
+    <string name="onboarding_desc_4">Izinkan akses Kamera &amp; Lokasi agar CamGPS dapat bekerja optimal menghasilkan dokumentasi presisi tinggi untuk Anda.</string>
 </resources>
