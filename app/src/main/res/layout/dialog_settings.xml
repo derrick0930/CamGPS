@@ -103,8 +103,9 @@
             android:id="@+id/switchGpsWatermark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            app:thumbTint="@android:color/white"
-            app:trackTint="#00E5FF" />
+            app:thumbTint="@color/switch_thumb_selector"
+            app:trackDecorationTint="@android:color/transparent"
+            app:trackTint="@color/switch_track_selector" />
     </LinearLayout>
 
 </LinearLayout>
