@@ -9,4 +9,7 @@
     <string name="photo_saved">Photo saved with GPS stamp</string>
     <string name="photo_save_failed">Failed to save photo</string>
     <string name="watermark_brand">CamGPS</string>
+    <string name="app_subtitle">GPS Map &amp; Watermark Camera</string>
+    <string name="loading_camera_gps">Memuat Kamera &amp; GPS...</string>
+    <string name="app_version_tag">Precision Location Stamping • v1.1</string>
 </resources>

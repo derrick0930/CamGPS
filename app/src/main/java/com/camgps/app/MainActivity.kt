@@ -21,6 +21,7 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -106,6 +107,8 @@ class MainActivity : AppCompatActivity() {
     private var videoTimerJob: Job? = null
     private var videoDurationSeconds = 0
 
+    private var isLoadingScreenDismissed = false
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -116,7 +119,10 @@ class MainActivity : AppCompatActivity() {
         if (cameraGranted && locationGranted) {
             bindCameraUseCases()
             startLocation()
+            dismissLoadingScreen(delayMs = 600L)
         } else {
+            binding.loadingScreenOverlay.visibility = View.GONE
+            isLoadingScreenDismissed = true
             showPermissionExplanationDialog()
         }
     }
@@ -131,6 +137,18 @@ class MainActivity : AppCompatActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Smooth entry animation for loading screen
+        binding.loadingCenterContent.alpha = 0f
+        binding.loadingCenterContent.scaleX = 0.94f
+        binding.loadingCenterContent.scaleY = 0.94f
+        binding.loadingCenterContent.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(400)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
         locationHelper = LocationHelper(this)
@@ -378,9 +396,29 @@ class MainActivity : AppCompatActivity() {
         if (missing.isEmpty()) {
             bindCameraUseCases()
             startLocation()
+            dismissLoadingScreen(delayMs = 1300L)
         } else {
+            binding.loadingScreenOverlay.visibility = View.GONE
+            isLoadingScreenDismissed = true
             permissionLauncher.launch(missing.toTypedArray())
         }
+    }
+
+    private fun dismissLoadingScreen(delayMs: Long = 1300L) {
+        if (isLoadingScreenDismissed) return
+        isLoadingScreenDismissed = true
+
+        binding.loadingScreenOverlay.postDelayed({
+            if (!isFinishing && !isDestroyed) {
+                binding.loadingScreenOverlay.animate()
+                    .alpha(0f)
+                    .setDuration(400)
+                    .withEndAction {
+                        binding.loadingScreenOverlay.visibility = View.GONE
+                    }
+                    .start()
+            }
+        }, delayMs)
     }
 
     private fun allPermissionsGranted(): Boolean {
